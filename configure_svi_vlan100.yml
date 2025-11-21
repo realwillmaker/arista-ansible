@@ -1,0 +1,55 @@
+---
+- name: Configure L3 SVI on VLAN 100
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  tasks:
+    - name: Ensure VLAN 100 exists
+      arista.eos.eos_vlans:
+        config:
+          - vlan_id: 100
+            name: "VLAN_100_Engineering"
+            state: active
+        state: merged
+
+    - name: Configure SVI interface Vlan100 with IP
+      arista.eos.eos_l3_interfaces:
+        config:
+          - name: Vlan100
+            ipv4:
+              - address: 192.168.100.1/24
+        state: merged
+
+    - name: Set description on Vlan100 interface
+      arista.eos.eos_interfaces:
+        config:
+          - name: Vlan100
+            description: "L3 SVI for Engineering subnet"
+            enabled: true
+        state: merged
+
+    - name: Verify VLAN 100 configuration
+      arista.eos.eos_command:
+        commands:
+          - show vlan id 100
+      register: vlan_output
+
+    - name: Verify SVI interface configuration
+      arista.eos.eos_command:
+        commands:
+          - show ip interface brief Vlan100
+          - show interface Vlan100
+      register: svi_output
+
+    - name: Display VLAN configuration
+      debug:
+        msg: "VLAN 100 is configured and active"
+
+    - name: Display SVI configuration
+      debug:
+        var: svi_output.stdout_lines
+
+    - name: Connectivity test message
+      debug:
+        msg: "You can now reach the switch at 192.168.100.1/24 on the Engineering subnet!"

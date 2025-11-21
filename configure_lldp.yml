@@ -1,0 +1,87 @@
+---
+- name: Enable LLDP Globally and Verify Neighbors
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  tasks:
+    - name: Enable LLDP globally
+      arista.eos.eos_lldp_global:
+        config:
+          holdtime: 120
+          reinit: 2
+          timer: 30
+        state: merged
+      register: lldp_global
+
+    - name: Display LLDP global configuration result
+      debug:
+        msg: "LLDP globally enabled with 30s timer, 120s holdtime"
+      when: lldp_global.changed
+
+    - name: Enable LLDP transmit and receive on all Ethernet interfaces
+      arista.eos.eos_lldp_interfaces:
+        config:
+          - name: "{{ item }}"
+            transmit: true
+            receive: true
+        state: merged
+      loop:
+        - Ethernet1
+        - Ethernet2
+        - Ethernet3
+        - Ethernet4
+        - Ethernet5
+        - Ethernet6
+        - Ethernet7
+        - Ethernet8
+      register: lldp_interfaces
+
+    - name: Display interfaces with LLDP enabled
+      debug:
+        msg: "LLDP enabled on {{ item.item }}"
+      loop: "{{ lldp_interfaces.results }}"
+      when: item.changed
+
+    - name: Wait for LLDP to discover neighbors (30 seconds)
+      pause:
+        seconds: 30
+        prompt: "Waiting for LLDP neighbor discovery..."
+
+    - name: Verify LLDP status
+      arista.eos.eos_command:
+        commands:
+          - show lldp
+      register: lldp_status
+
+    - name: Display LLDP status
+      debug:
+        var: lldp_status.stdout_lines
+
+    - name: Get LLDP neighbor information
+      arista.eos.eos_command:
+        commands:
+          - show lldp neighbors
+          - show lldp neighbors detail
+      register: lldp_neighbors
+
+    - name: Display LLDP neighbors
+      debug:
+        var: lldp_neighbors.stdout_lines
+
+    - name: Check if neighbors were discovered
+      debug:
+        msg: "{{ 'LLDP neighbors found!' if 'Total entries displayed' in lldp_neighbors.stdout[0] else 'No LLDP neighbors detected yet (may need more time or additional switches)' }}"
+
+    - name: Summary
+      debug:
+        msg:
+          - "========================================="
+          - "LLDP CONFIGURATION COMPLETE"
+          - "========================================="
+          - "Status: LLDP globally enabled"
+          - "Timer: 30 seconds"
+          - "Holdtime: 120 seconds"
+          - "Interfaces: Ethernet1-8 enabled for LLDP"
+          - "Topology Discovery: Use 'show lldp neighbors' to view"
+          - "========================================="

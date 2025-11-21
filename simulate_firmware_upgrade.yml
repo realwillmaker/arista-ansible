@@ -1,0 +1,125 @@
+---
+- name: Simulate Arista EOS Firmware Upgrade (Safe for Demo)
+  hosts: arista-switch
+  gather_facts: yes
+  connection: network_cli
+
+  vars:
+    # Simulated firmware details (not a real upgrade)
+    firmware_image: "EOS-4.36.0F.swi"
+    firmware_url: "http://repo.lab.local/firmware/EOS-4.36.0F.swi"
+    firmware_md5: "abc123def456789012345678901234ef"  # Mock checksum
+
+  tasks:
+    - name: Display pre-upgrade information
+      debug:
+        msg:
+          - "========================================="
+          - "FIRMWARE UPGRADE SIMULATION"
+          - "========================================="
+          - "Current Version: {{ ansible_net_version }}"
+          - "Target Version: 4.36.0F"
+          - "Image: {{ firmware_image }}"
+          - "This is a SAFE SIMULATION - No actual upgrade will occur"
+          - "========================================="
+
+    - name: Step 1 - Check current firmware version
+      arista.eos.eos_command:
+        commands:
+          - show version | include Software
+          - show boot-config
+      register: current_version
+
+    - name: Display current version
+      debug:
+        var: current_version.stdout_lines
+
+    - name: Step 2 - Verify available disk space
+      arista.eos.eos_command:
+        commands:
+          - dir flash:
+      register: disk_space
+
+    - name: Display disk space
+      debug:
+        msg: "Checking flash storage space..."
+
+    - name: Step 3 - Simulate firmware download
+      debug:
+        msg:
+          - "Simulating download from {{ firmware_url }}"
+          - "Download progress: [##########] 100%"
+          - "File size: 512 MB"
+          - "Download time: ~5 minutes (simulated instantly)"
+
+    - name: Step 4 - Simulate MD5 checksum verification
+      debug:
+        msg:
+          - "Verifying MD5 checksum..."
+          - "Expected: {{ firmware_md5 }}"
+          - "Actual: {{ firmware_md5 }}"
+          - "✓ Checksum verification PASSED"
+
+    - name: Step 5 - Simulate setting boot system image
+      debug:
+        msg:
+          - "Setting boot system to new firmware..."
+          - "Command: boot system flash:/{{ firmware_image }}"
+          - "✓ Boot configuration updated"
+
+    - name: Step 6 - Backup current configuration before upgrade
+      arista.eos.eos_config:
+        backup: yes
+        backup_options:
+          filename: "pre_upgrade_backup_{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}.cfg"
+          dir_path: "/tmp"
+      register: backup_result
+
+    - name: Display backup location
+      debug:
+        msg: "Configuration backed up to: {{ backup_result.backup_path }}"
+
+    - name: Step 7 - Display upgrade simulation summary
+      debug:
+        msg:
+          - "========================================="
+          - "UPGRADE SIMULATION SUMMARY"
+          - "========================================="
+          - "✓ Current version verified: {{ ansible_net_version }}"
+          - "✓ Disk space checked"
+          - "✓ Firmware downloaded (simulated)"
+          - "✓ MD5 checksum verified"
+          - "✓ Boot system configured (simulated)"
+          - "✓ Configuration backed up"
+          - ""
+          - "In a real upgrade, next steps would be:"
+          - "  1. Save configuration: copy running-config startup-config"
+          - "  2. Set boot variable: boot system flash:/{{ firmware_image }}"
+          - "  3. Reload switch: reload now"
+          - "  4. Wait ~10 minutes for boot"
+          - "  5. Verify new version: show version"
+          - ""
+          - "⚠️  This was a SIMULATION - no actual upgrade performed"
+          - "========================================="
+
+    - name: Step 8 - Verify current running configuration is saved
+      arista.eos.eos_config:
+        save_when: changed
+
+    - name: Final verification - Show boot configuration
+      arista.eos.eos_command:
+        commands:
+          - show boot-config
+          - show version | include Software
+      register: final_verification
+
+    - name: Display final verification
+      debug:
+        var: final_verification.stdout_lines
+
+    - name: Upgrade simulation complete
+      debug:
+        msg:
+          - "Firmware upgrade simulation completed successfully!"
+          - "All steps demonstrated without making actual firmware changes."
+          - "Current system remains on version {{ ansible_net_version }}"

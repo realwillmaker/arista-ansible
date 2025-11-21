@@ -1,0 +1,51 @@
+---
+- name: Backup Arista Running Configuration
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  tasks:
+    - name: Get current timestamp
+      set_fact:
+        backup_timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+
+    - name: Display backup information
+      debug:
+        msg: "Starting configuration backup at {{ backup_timestamp }}"
+
+    - name: Backup running configuration
+      arista.eos.eos_config:
+        backup: yes
+        backup_options:
+          filename: "arista_switch_{{ backup_timestamp }}.cfg"
+          dir_path: "/tmp"
+      register: backup_result
+
+    - name: Display backup location
+      debug:
+        msg: "Configuration backed up to: {{ backup_result.backup_path }}"
+
+    - name: Get running configuration for display
+      arista.eos.eos_command:
+        commands:
+          - show running-config | include hostname
+          - show version | include Software
+      register: config_info
+
+    - name: Display switch information
+      debug:
+        var: config_info.stdout_lines
+
+    - name: Verify backup file exists
+      stat:
+        path: "{{ backup_result.backup_path }}"
+      register: backup_file
+      delegate_to: localhost
+
+    - name: Backup summary
+      debug:
+        msg:
+          - "Backup completed successfully!"
+          - "File: {{ backup_result.backup_path }}"
+          - "Timestamp: {{ backup_timestamp }}"
+          - "File exists: {{ backup_file.stat.exists }}"

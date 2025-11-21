@@ -1,0 +1,102 @@
+---
+- name: Configure NTP Servers and Timezone
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  vars:
+    ntp_servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+      - 2.pool.ntp.org
+    timezone: "America/Chicago"
+
+  tasks:
+    - name: Configure timezone
+      arista.eos.eos_config:
+        lines:
+          - clock timezone {{ timezone }}
+      register: timezone_result
+
+    - name: Display timezone configuration
+      debug:
+        msg: "Timezone set to {{ timezone }}"
+      when: timezone_result.changed
+
+    - name: Configure NTP servers
+      arista.eos.eos_config:
+        lines:
+          - ntp server {{ item }}
+        parents: []
+      loop: "{{ ntp_servers }}"
+      register: ntp_result
+
+    - name: Display NTP server configuration
+      debug:
+        msg: "NTP server {{ item.item }} configured"
+      loop: "{{ ntp_result.results }}"
+      when: item.changed
+
+    - name: Configure clock summer-time (DST) recurring
+      arista.eos.eos_config:
+        lines:
+          - clock summer-time recurring
+      register: dst_result
+
+    - name: Display DST configuration
+      debug:
+        msg: "Daylight Saving Time configured as recurring"
+      when: dst_result.changed
+
+    - name: Wait for NTP synchronization (10 seconds)
+      pause:
+        seconds: 10
+        prompt: "Waiting for NTP synchronization..."
+
+    - name: Verify NTP configuration
+      arista.eos.eos_command:
+        commands:
+          - show ntp status
+          - show ntp associations
+      register: ntp_status
+
+    - name: Display NTP status
+      debug:
+        var: ntp_status.stdout_lines
+
+    - name: Verify clock configuration
+      arista.eos.eos_command:
+        commands:
+          - show clock
+          - show clock detail
+      register: clock_status
+
+    - name: Display current clock
+      debug:
+        var: clock_status.stdout_lines
+
+    - name: Verify running configuration for NTP and timezone
+      arista.eos.eos_command:
+        commands:
+          - show running-config | include ntp
+          - show running-config | include clock
+      register: config_verification
+
+    - name: Display NTP and clock configuration
+      debug:
+        var: config_verification.stdout_lines
+
+    - name: Summary
+      debug:
+        msg:
+          - "========================================="
+          - "NTP AND TIMEZONE CONFIGURATION COMPLETE"
+          - "========================================="
+          - "Timezone: {{ timezone }}"
+          - "DST: Recurring (automatic)"
+          - "NTP Servers:"
+          - "  - {{ ntp_servers[0] }}"
+          - "  - {{ ntp_servers[1] }}"
+          - "  - {{ ntp_servers[2] }}"
+          - "Status: Use 'show ntp status' to verify sync"
+          - "========================================="

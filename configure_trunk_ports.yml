@@ -1,0 +1,56 @@
+---
+- name: Convert Access Ports to Trunk Ports for VLANs 100-109
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  vars:
+    trunk_interfaces:
+      - Ethernet1
+      - Ethernet2
+      - Ethernet3
+      - Ethernet4
+    allowed_vlans: "100-109"
+
+  tasks:
+    - name: Configure interfaces as trunk ports
+      arista.eos.eos_l2_interfaces:
+        config:
+          - name: "{{ item }}"
+            mode: trunk
+            trunk:
+              allowed_vlans: "{{ allowed_vlans }}"
+        state: merged
+      loop: "{{ trunk_interfaces }}"
+      register: trunk_result
+
+    - name: Set description on trunk interfaces
+      arista.eos.eos_interfaces:
+        config:
+          - name: "{{ item }}"
+            description: "Trunk port - VLANs 100-109"
+            enabled: true
+        state: merged
+      loop: "{{ trunk_interfaces }}"
+
+    - name: Display trunk configuration results
+      debug:
+        msg: "Configured {{ item.item }} as trunk port allowing VLANs {{ allowed_vlans }}"
+      loop: "{{ trunk_result.results }}"
+      when: item.changed
+
+    - name: Verify trunk port configuration
+      arista.eos.eos_command:
+        commands:
+          - show interfaces trunk
+          - show interfaces {{ item }} switchport
+      loop: "{{ trunk_interfaces }}"
+      register: trunk_verification
+
+    - name: Display trunk port details
+      debug:
+        var: trunk_verification.results
+
+    - name: Summary
+      debug:
+        msg: "Successfully configured {{ trunk_interfaces | length }} interfaces as trunk ports with VLANs {{ allowed_vlans }}"

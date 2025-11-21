@@ -1,0 +1,68 @@
+---
+- name: Gather and Display Arista Switch Facts
+  hosts: arista-switch
+  gather_facts: yes
+  connection: network_cli
+
+  tasks:
+    - name: Gather all facts from Arista switch
+      arista.eos.eos_facts:
+        gather_subset:
+          - all
+      register: switch_facts
+
+    - name: Display hostname
+      debug:
+        msg: "Hostname: {{ ansible_net_hostname }}"
+
+    - name: Display hardware information
+      debug:
+        msg:
+          - "Model: {{ ansible_net_model }}"
+          - "Serial Number: {{ ansible_net_serialnum }}"
+          - "Hardware Version: {{ ansible_net_version }}"
+
+    - name: Display software information
+      debug:
+        msg:
+          - "EOS Version: {{ ansible_net_version }}"
+          - "Image: {{ ansible_net_image }}"
+
+    - name: Display memory information
+      debug:
+        msg:
+          - "Total Memory: {{ ansible_net_memtotal_mb }} MB"
+          - "Free Memory: {{ ansible_net_memfree_mb }} MB"
+
+    - name: Display all interfaces
+      debug:
+        msg: "Interface {{ item.key }}: {{ item.value.description | default('No description') }} - {{ item.value.operstatus }}"
+      loop: "{{ ansible_net_interfaces | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Display management IP addresses
+      debug:
+        msg: "{{ item.key }}: {{ item.value.ipv4 | default('No IP configured') }}"
+      loop: "{{ ansible_net_interfaces | dict2items }}"
+      when: item.value.ipv4 is defined
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Display neighbor information (if available)
+      debug:
+        var: ansible_net_neighbors
+      when: ansible_net_neighbors is defined
+
+    - name: Summary - Device Overview
+      debug:
+        msg:
+          - "========================================="
+          - "DEVICE DISCOVERY COMPLETE"
+          - "========================================="
+          - "Device: {{ ansible_net_hostname }}"
+          - "Model: {{ ansible_net_model }}"
+          - "Serial: {{ ansible_net_serialnum }}"
+          - "EOS Version: {{ ansible_net_version }}"
+          - "Total Interfaces: {{ ansible_net_interfaces | length }}"
+          - "========================================="

@@ -1,0 +1,112 @@
+---
+- name: Golden Config Compliance Check with Auto-Remediation
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  vars:
+    # Golden configuration standards
+    golden_config:
+      - "no ip domain-lookup"
+      - "ip domain-name lab.local"
+      - "ip name-server 8.8.8.8"
+      - "ip name-server 8.8.4.4"
+      - "logging buffered 32000"
+      - "logging console warnings"
+      - "banner login"
+      - "EOF"
+      - "********************************************************"
+      - "* Unauthorized access is prohibited                   *"
+      - "* All activities are logged and monitored             *"
+      - "********************************************************"
+      - "EOF"
+
+  tasks:
+    - name: Get current running configuration
+      arista.eos.eos_command:
+        commands:
+          - show running-config
+      register: current_config
+
+    - name: Save current configuration for comparison
+      set_fact:
+        running_config: "{{ current_config.stdout[0] }}"
+
+    - name: Display compliance check starting
+      debug:
+        msg: "Starting golden config compliance check and auto-remediation..."
+
+    - name: Apply golden configuration standards
+      arista.eos.eos_config:
+        lines: "{{ golden_config }}"
+        save_when: modified
+      register: compliance_result
+
+    - name: Display configuration changes
+      debug:
+        msg: "Configuration drift detected and remediated!"
+      when: compliance_result.changed
+
+    - name: Display no changes message
+      debug:
+        msg: "Configuration is compliant - no drift detected"
+      when: not compliance_result.changed
+
+    - name: Get updated running configuration
+      arista.eos.eos_command:
+        commands:
+          - show running-config | include domain
+          - show running-config | include name-server
+          - show running-config | include logging
+          - show banner login
+      register: updated_config
+
+    - name: Display updated configuration sections
+      debug:
+        var: updated_config.stdout_lines
+
+    - name: Verify DNS configuration
+      arista.eos.eos_command:
+        commands:
+          - show ip name-server
+      register: dns_verification
+
+    - name: Display DNS server configuration
+      debug:
+        var: dns_verification.stdout_lines
+
+    - name: Verify logging configuration
+      arista.eos.eos_command:
+        commands:
+          - show logging
+      register: logging_verification
+
+    - name: Display logging configuration
+      debug:
+        msg: "{{ logging_verification.stdout_lines[0] | list | first }}"
+
+    - name: Create compliance report
+      set_fact:
+        compliance_report:
+          - "========================================="
+          - "GOLDEN CONFIG COMPLIANCE REPORT"
+          - "========================================="
+          - "Status: {{ 'REMEDIATED' if compliance_result.changed else 'COMPLIANT' }}"
+          - "Drift Detected: {{ 'Yes' if compliance_result.changed else 'No' }}"
+          - "Auto-Remediation: {{ 'Applied' if compliance_result.changed else 'Not Required' }}"
+          - "Configuration Saved: {{ 'Yes' if compliance_result.changed else 'No changes' }}"
+          - ""
+          - "Golden Standards Applied:"
+          - "  ✓ DNS domain and name servers"
+          - "  ✓ Logging buffer and console settings"
+          - "  ✓ Security banner"
+          - "  ✓ Domain lookup disabled"
+          - "========================================="
+
+    - name: Display compliance report
+      debug:
+        msg: "{{ compliance_report }}"
+
+    - name: Summary
+      debug:
+        msg: "Compliance check complete. Configuration {{ 'has been remediated to match' if compliance_result.changed else 'matches' }} golden standards."

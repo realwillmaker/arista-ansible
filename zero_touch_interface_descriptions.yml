@@ -1,0 +1,59 @@
+---
+- name: Zero-Touch Interface Description Configuration
+  hosts: arista-switch
+  gather_facts: yes
+  connection: network_cli
+
+  tasks:
+    - name: Gather interface facts
+      arista.eos.eos_facts:
+        gather_subset:
+          - interfaces
+      register: facts_output
+
+    - name: Display discovered interfaces
+      debug:
+        msg: "Found {{ ansible_net_interfaces | length }} interfaces to configure"
+
+    - name: Configure interface descriptions based on speed
+      arista.eos.eos_interfaces:
+        config:
+          - name: "{{ item.key }}"
+            description: "{% if item.value.bandwidth >= 100000000 %}UPLINK-100G{% elif item.value.bandwidth >= 40000000 %}UPLINK-40G{% elif item.value.bandwidth >= 10000000 %}UPLINK-10G{% elif item.value.bandwidth >= 1000000 %}ACCESS-1G{% else %}MGMT-{{ item.value.bandwidth // 1000000 }}M{% endif %}"
+            enabled: true
+        state: merged
+      loop: "{{ ansible_net_interfaces | dict2items }}"
+      when:
+        - item.key is match('^Ethernet.*') or item.key is match('^Management.*')
+        - item.value.bandwidth is defined
+      register: description_result
+
+    - name: Display configured interface descriptions
+      debug:
+        msg: "Set description on {{ item.item.key }}: Speed {{ item.item.value.bandwidth // 1000000 }}Mbps"
+      loop: "{{ description_result.results }}"
+      when:
+        - item.changed is defined
+        - item.changed
+
+    - name: Verify interface descriptions
+      arista.eos.eos_command:
+        commands:
+          - show interfaces description
+      register: interface_descriptions
+
+    - name: Display all interface descriptions
+      debug:
+        var: interface_descriptions.stdout_lines
+
+    - name: Summary
+      debug:
+        msg:
+          - "Zero-touch interface description configuration complete!"
+          - "Interfaces configured: {{ description_result.results | selectattr('changed', 'defined') | selectattr('changed', 'equalto', true) | list | length }}"
+          - "Naming convention:"
+          - "  100G+ = UPLINK-100G"
+          - "  40G = UPLINK-40G"
+          - "  10G = UPLINK-10G"
+          - "  1G = ACCESS-1G"
+          - "  <1G = MGMT-*M"
