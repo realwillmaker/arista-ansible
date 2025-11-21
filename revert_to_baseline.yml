@@ -1,0 +1,220 @@
+---
+- name: Revert Arista Switch to Baseline Configuration
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  tasks:
+    - name: Display revert operation starting
+      debug:
+        msg:
+          - "========================================="
+          - "REVERTING TO BASELINE CONFIGURATION"
+          - "========================================="
+          - "This playbook will remove all demo configurations"
+          - "and restore the switch to a clean state"
+          - "========================================="
+
+    - name: Step 1 - Remove VLANs 100-109
+      arista.eos.eos_vlans:
+        config:
+          - vlan_id: "{{ item }}"
+        state: deleted
+      loop:
+        - 100
+        - 101
+        - 102
+        - 103
+        - 104
+        - 105
+        - 106
+        - 107
+        - 108
+        - 109
+      register: vlan_removal
+      ignore_errors: yes
+
+    - name: Display VLAN removal results
+      debug:
+        msg: "Removed VLAN {{ item.item }}"
+      loop: "{{ vlan_removal.results }}"
+      when:
+        - item.changed is defined
+        - item.changed
+
+    - name: Step 2 - Remove SVI interface Vlan100
+      arista.eos.eos_interfaces:
+        config:
+          - name: Vlan100
+        state: deleted
+      register: svi_removal
+      ignore_errors: yes
+
+    - name: Display SVI removal result
+      debug:
+        msg: "Removed SVI interface Vlan100"
+      when: svi_removal.changed
+
+    - name: Step 3 - Reset Ethernet1-4 to default (access mode)
+      arista.eos.eos_l2_interfaces:
+        config:
+          - name: "{{ item }}"
+            mode: access
+            access:
+              vlan: 1
+        state: replaced
+      loop:
+        - Ethernet1
+        - Ethernet2
+        - Ethernet3
+        - Ethernet4
+      register: interface_reset
+      ignore_errors: yes
+
+    - name: Display interface reset results
+      debug:
+        msg: "Reset {{ item.item }} to access mode VLAN 1"
+      loop: "{{ interface_reset.results }}"
+      when:
+        - item.changed is defined
+        - item.changed
+
+    - name: Step 4 - Remove interface descriptions from Ethernet interfaces
+      arista.eos.eos_interfaces:
+        config:
+          - name: "{{ item }}"
+            description: ""
+        state: merged
+      loop:
+        - Ethernet1
+        - Ethernet2
+        - Ethernet3
+        - Ethernet4
+        - Ethernet5
+        - Ethernet6
+        - Ethernet7
+        - Ethernet8
+      register: description_removal
+      ignore_errors: yes
+
+    - name: Step 5 - Disable LLDP on interfaces
+      arista.eos.eos_lldp_interfaces:
+        config:
+          - name: "{{ item }}"
+        state: deleted
+      loop:
+        - Ethernet1
+        - Ethernet2
+        - Ethernet3
+        - Ethernet4
+        - Ethernet5
+        - Ethernet6
+        - Ethernet7
+        - Ethernet8
+      register: lldp_removal
+      ignore_errors: yes
+
+    - name: Step 6 - Remove golden config standards
+      arista.eos.eos_config:
+        lines:
+          - ip domain-lookup
+          - no ip domain-name
+          - no ip name-server 8.8.8.8
+          - no ip name-server 8.8.4.4
+          - no banner login
+        save_when: modified
+      register: golden_config_removal
+      ignore_errors: yes
+
+    - name: Step 7 - Remove NTP servers
+      arista.eos.eos_config:
+        lines:
+          - no ntp server 0.pool.ntp.org
+          - no ntp server 1.pool.ntp.org
+          - no ntp server 2.pool.ntp.org
+        save_when: modified
+      register: ntp_removal
+      ignore_errors: yes
+
+    - name: Display NTP removal result
+      debug:
+        msg: "NTP servers removed"
+      when: ntp_removal.changed
+
+    - name: Step 8 - Reset timezone to default
+      arista.eos.eos_config:
+        lines:
+          - no clock timezone
+          - no clock summer-time
+        save_when: modified
+      register: timezone_removal
+      ignore_errors: yes
+
+    - name: Display timezone removal result
+      debug:
+        msg: "Timezone configuration removed"
+      when: timezone_removal.changed
+
+    - name: Step 9 - Verify VLANs removed
+      arista.eos.eos_command:
+        commands:
+          - show vlan
+      register: final_vlans
+
+    - name: Step 10 - Verify interfaces reset
+      arista.eos.eos_command:
+        commands:
+          - show interfaces status
+          - show interfaces trunk
+      register: final_interfaces
+
+    - name: Step 11 - Verify running configuration
+      arista.eos.eos_command:
+        commands:
+          - show running-config | include ntp
+          - show running-config | include clock
+          - show running-config | include domain
+          - show running-config | include banner
+      register: final_config
+
+    - name: Display final VLAN state
+      debug:
+        msg: "Final VLAN configuration (should only show default VLANs)"
+
+    - name: Show remaining VLANs
+      debug:
+        var: final_vlans.stdout_lines
+
+    - name: Display final interface state
+      debug:
+        msg: "Final interface configuration (Ethernet1-4 should be access ports)"
+
+    - name: Step 12 - Save configuration
+      arista.eos.eos_config:
+        save_when: always
+      register: config_save
+
+    - name: Display save result
+      debug:
+        msg: "Configuration saved to startup-config"
+      when: config_save.changed
+
+    - name: Final Summary
+      debug:
+        msg:
+          - "========================================="
+          - "BASELINE REVERT COMPLETE"
+          - "========================================="
+          - "✓ VLANs 100-109 removed"
+          - "✓ SVI Vlan100 removed"
+          - "✓ Ethernet1-4 reset to access mode VLAN 1"
+          - "✓ Interface descriptions cleared"
+          - "✓ LLDP interface configuration removed"
+          - "✓ NTP servers removed"
+          - "✓ Timezone reset to default"
+          - "✓ Golden config standards removed"
+          - "✓ Configuration saved"
+          - ""
+          - "Switch is now in baseline state"
+          - "Ready for next demo run!"
+          - "========================================="
