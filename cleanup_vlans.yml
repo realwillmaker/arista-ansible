@@ -1,0 +1,66 @@
+---
+- name: Remove VLANs from Arista Switch
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  vars:
+    vlan_ids_to_remove:
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+
+  tasks:
+    - name: Get current VLANs before cleanup
+      arista.eos.eos_command:
+        commands:
+          - show vlan
+      register: vlans_before
+
+    - name: Display VLANs before cleanup
+      debug:
+        msg: "VLANs before cleanup:"
+        verbosity: 0
+
+    - name: Show current VLAN configuration
+      debug:
+        var: vlans_before.stdout_lines[0]
+
+    - name: Remove VLANs 100-109
+      arista.eos.eos_vlans:
+        config:
+          - vlan_id: "{{ item }}"
+        state: deleted
+      loop: "{{ vlan_ids_to_remove }}"
+      register: vlan_cleanup_result
+
+    - name: Display VLAN removal results
+      debug:
+        msg: "Removed VLAN {{ item.item }}"
+      loop: "{{ vlan_cleanup_result.results }}"
+      when: item.changed
+
+    - name: Verify VLANs were removed
+      arista.eos.eos_command:
+        commands:
+          - show vlan
+      register: vlans_after
+
+    - name: Display VLANs after cleanup
+      debug:
+        msg: "VLANs after cleanup:"
+
+    - name: Show final VLAN configuration
+      debug:
+        var: vlans_after.stdout_lines[0]
+
+    - name: Summary
+      debug:
+        msg: "Successfully removed {{ vlan_cleanup_result.results | selectattr('changed', 'equalto', true) | list | length }} VLANs"

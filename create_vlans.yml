@@ -1,0 +1,55 @@
+---
+- name: Create 10 VLANs on Arista Switch
+  hosts: arista-switch
+  gather_facts: no
+  connection: network_cli
+
+  vars:
+    vlans:
+      - vlan_id: 100
+        name: "VLAN_100_Engineering"
+      - vlan_id: 101
+        name: "VLAN_101_Sales"
+      - vlan_id: 102
+        name: "VLAN_102_Marketing"
+      - vlan_id: 103
+        name: "VLAN_103_HR"
+      - vlan_id: 104
+        name: "VLAN_104_Finance"
+      - vlan_id: 105
+        name: "VLAN_105_Operations"
+      - vlan_id: 106
+        name: "VLAN_106_Support"
+      - vlan_id: 107
+        name: "VLAN_107_Development"
+      - vlan_id: 108
+        name: "VLAN_108_Testing"
+      - vlan_id: 109
+        name: "VLAN_109_Production"
+
+  tasks:
+    - name: Create 10 VLANs with names
+      arista.eos.eos_vlans:
+        config:
+          - vlan_id: "{{ item.vlan_id }}"
+            name: "{{ item.name }}"
+            state: active
+        state: merged
+      loop: "{{ vlans }}"
+      register: vlan_result
+
+    - name: Display VLAN creation results
+      debug:
+        msg: "Created VLAN {{ item.item.vlan_id }} - {{ item.item.name }}"
+      loop: "{{ vlan_result.results }}"
+      when: item.changed
+
+    - name: Verify VLANs were created
+      arista.eos.eos_command:
+        commands:
+          - show vlan
+      register: show_vlan_output
+
+    - name: Display current VLANs
+      debug:
+        var: show_vlan_output.stdout_lines
