@@ -1,3 +1,2 @@
 collections:
   - name: arista.eos
-    source: https://aap-ansible-automation-platform.apps.dgx.sneef.com/api/galaxy/
